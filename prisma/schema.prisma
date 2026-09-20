@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("ADMIN") // "SUPER_ADMIN", "ADMIN", "EDITOR"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?  @default("")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  games       Game[]
+}
+
+model Game {
+  id             String    @id @default(cuid())
+  name           String
+  slug           String    @unique
+  categoryId     String?
+  category       Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  resultTime     String    // e.g. "03:00 PM"
+  description    String    @default("")
+  isActive       Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  results        Result[]
+
+  @@index([slug])
+  @@index([categoryId])
+}
+
+model Result {
+  id          String    @id @default(cuid())
+  gameId      String
+  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  resultDate  String    // "YYYY-MM-DD"
+  resultValue String    // "00" to "99" or custom published number
+  resultTime  String    // "03:00 PM"
+  status      String    @default("PUBLISHED") // "PUBLISHED", "DRAFT", "CORRECTED", "ARCHIVED"
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([gameId, resultDate])
+  @@index([resultDate])
+  @@index([status])
+}
+
+model FAQ {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  category  String   @default("General") // "General", "Results", "Timetable", "Legal"
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([sortOrder])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String?  @default("Public Inquiry")
+  message   String
+  status    String   @default("UNREAD") // "UNREAD", "READ", "REPLIED"
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "notice_board", "site_title", "alert_banner"
+  title     String
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model PageContent {
+  id          String   @id @default(cuid())
+  key         String   @unique // "about", "disclaimer", "privacy-policy", "terms"
+  title       String
+  contentJson String   // Structured JSON content or Markdown string
+  updatedAt   DateTime @updatedAt
+}
+
+model SEOSetting {
+  id              String   @id @default(cuid())
+  pagePath        String   @unique
+  metaTitle       String
+  metaDescription String
+  canonicalUrl    String?
+  ogTitle         String?
+  ogDescription   String?
+  robots          String?  @default("index, follow")
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  adminId       String?
+  adminUsername String
+  action        String   // "CREATE_RESULT", "UPDATE_RESULT", "PUBLISH_RESULT", "CORRECT_RESULT", "UNPUBLISH_RESULT", "CREATE_GAME", "UPDATE_GAME", "DELETE_GAME", "UPDATE_SETTING"
+  gameId        String?
+  gameName      String?
+  targetDate    String?  // "YYYY-MM-DD"
+  oldResult     String?
+  newResult     String?
+  reasonNote    String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
