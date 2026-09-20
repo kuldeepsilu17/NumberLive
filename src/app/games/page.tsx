@@ -25,67 +25,72 @@ async function getGamesData(categorySlug?: string) {
   const todayStr = '2026-09-17';
   const yesterdayStr = getYesterdayYYYYMMDD(todayStr);
 
-  const categories = await prisma.category.findMany({
-    orderBy: { sortOrder: 'asc' },
-  });
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
 
-  const where: any = { isActive: true };
-  if (categorySlug && categorySlug !== 'all') {
-    where.category = { slug: categorySlug };
-  }
+    const where: any = { isActive: true };
+    if (categorySlug && categorySlug !== 'all') {
+      where.category = { slug: categorySlug };
+    }
 
-  const games = await prisma.game.findMany({
-    where,
-    orderBy: { sortOrder: 'asc' },
-    include: {
-      category: true,
-      results: {
-        where: { status: 'PUBLISHED' },
-        orderBy: { resultDate: 'desc' },
-        take: 1,
+    const games = await prisma.game.findMany({
+      where,
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        category: true,
+        results: {
+          where: { status: 'PUBLISHED' },
+          orderBy: { resultDate: 'desc' },
+          take: 1,
+        },
       },
-    },
-  });
+    });
 
-  const allGames = await prisma.game.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-  });
+    const allGames = await prisma.game.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
 
-  const todayResults = await prisma.result.findMany({
-    where: { resultDate: todayStr },
-  });
-  const yesterdayResults = await prisma.result.findMany({
-    where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
-  });
+    const todayResults = await prisma.result.findMany({
+      where: { resultDate: todayStr },
+    });
+    const yesterdayResults = await prisma.result.findMany({
+      where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
+    });
 
-  const resultMap: Record<string, { today: any; yesterday: any }> = {};
-  allGames.forEach((g) => {
-    resultMap[g.id] = { today: null, yesterday: null };
-  });
+    const resultMap: Record<string, { today: any; yesterday: any }> = {};
+    allGames.forEach((g) => {
+      resultMap[g.id] = { today: null, yesterday: null };
+    });
 
-  todayResults.forEach((r) => {
-    if (resultMap[r.gameId]) resultMap[r.gameId].today = r;
-  });
+    todayResults.forEach((r) => {
+      if (resultMap[r.gameId]) resultMap[r.gameId].today = r;
+    });
 
-  yesterdayResults.forEach((r) => {
-    if (resultMap[r.gameId]) resultMap[r.gameId].yesterday = r;
-  });
+    yesterdayResults.forEach((r) => {
+      if (resultMap[r.gameId]) resultMap[r.gameId].yesterday = r;
+    });
 
-  const summary = allGames.map((game) => {
-    const t = resultMap[game.id]?.today;
-    const y = resultMap[game.id]?.yesterday;
-    return {
-      game,
-      yesterdayResult: y ? y.resultValue : null,
-      todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
-      status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
-      resultTime: game.resultTime,
-      updatedAt: t ? t.updatedAt : null,
-    };
-  });
+    const summary = allGames.map((game) => {
+      const t = resultMap[game.id]?.today;
+      const y = resultMap[game.id]?.yesterday;
+      return {
+        game,
+        yesterdayResult: y ? y.resultValue : null,
+        todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
+        status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
+        resultTime: game.resultTime,
+        updatedAt: t ? t.updatedAt : null,
+      };
+    });
 
-  return { games, categories, summary, activeCategory: categorySlug || 'all' };
+    return { games, categories, summary, activeCategory: categorySlug || 'all' };
+  } catch (err) {
+    console.warn('Prisma query warning on /games:', err);
+    return { games: [], categories: [], summary: [], activeCategory: categorySlug || 'all' };
+  }
 }
 
 export default async function GamesPage({ searchParams }: PageProps) {

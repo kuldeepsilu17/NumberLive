@@ -4,7 +4,10 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db';
+// Fallback postgresql URL for build-time static evaluation when DATABASE_URL is not provided
+const databaseUrl =
+  process.env.DATABASE_URL ||
+  'postgresql://postgres:postgres@localhost:5432/numberlive?schema=public';
 
 export const prisma =
   globalForPrisma.prisma ??

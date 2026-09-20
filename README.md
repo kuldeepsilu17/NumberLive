@@ -163,18 +163,45 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to view the 
 
 ---
 
-## 🔐 Environment Variables
+## 🗄️ Database Setup (PostgreSQL)
 
-The project uses the following environment variables (defined in `.env`):
+NumberLive uses **PostgreSQL** in production with **Prisma ORM**.
 
-| Variable | Description | Example / Default |
+### 1. PostgreSQL Requirement
+- **Local Development**: You can use a local PostgreSQL instance or a free cloud PostgreSQL database (e.g., Supabase, Neon, Railway, Aiven).
+- **Production (Vercel)**: A hosted serverless PostgreSQL instance with connection pooling (e.g., Supabase, Neon, or Vercel Postgres) is required.
+
+### 2. Environment Variables Configuration
+Set the following variables in your `.env` file (local) and **Vercel Project Settings $\rightarrow$ Environment Variables** (production):
+
+| Variable | Description | Example Format |
 |---|---|---|
-| `DATABASE_URL` | SQLite / PostgreSQL connection string | `"file:./dev.db"` |
-| `JWT_SECRET` | Secret key for signing admin authentication JWTs | `"your-secure-jwt-secret-key"` |
-| `NEXT_PUBLIC_APP_URL` | Canonical URL of the application | `"http://localhost:3000"` |
-| `NEXT_PUBLIC_SITE_NAME` | Global site display name | `"NumberLive"` |
+| `DATABASE_URL` | PostgreSQL connection string with pooling | `postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require` |
+| `DIRECT_URL` | Direct connection URL for migrations (optional) | `postgresql://USER:PASSWORD@HOST:5432/DB_NAME` |
+| `JWT_SECRET` | Secret key for signing admin authentication tokens | `your-secure-random-jwt-secret` |
+| `NEXT_PUBLIC_APP_URL` | Canonical public URL of the application | `https://your-domain.vercel.app` |
+| `NEXT_PUBLIC_SITE_NAME` | Global site display name | `NumberLive` |
 
-> **Note**: Never commit your `.env` file or sensitive credentials to version control.
+> ⚠️ **Security Warning**: NEVER commit `.env` files, passwords, tokens, or credentials to GitHub.
+
+### 3. Database Migration & Seeding Commands
+Run these commands to prepare and seed your PostgreSQL database:
+
+```bash
+# 1. Validate Prisma schema
+npx prisma validate
+
+# 2. Generate Prisma Client
+npx prisma generate
+
+# 3. Apply schema to PostgreSQL database
+npx prisma db push
+# OR apply baseline migrations:
+# npx prisma migrate deploy
+
+# 4. Seed initial games, results, categories, and administrator
+npm run seed
+```
 
 ---
 
@@ -204,11 +231,18 @@ npm run lint
 ## 🌐 Deployment
 
 ### Deploying to Vercel
-1. Push your code to GitHub.
-2. Import the repository in [Vercel](https://vercel.com).
-3. Configure the environment variables (`DATABASE_URL`, `JWT_SECRET`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_NAME`).
-4. For cloud deployments, switch `DATABASE_URL` to a hosted PostgreSQL provider (e.g., Supabase, Neon, Railway) and update the datasource provider in `prisma/schema.prisma` to `postgresql`.
-5. Set the build command to: `prisma generate && next build`.
+1. Push your repository to GitHub.
+2. Import the project into [Vercel](https://vercel.com).
+3. Go to **Settings** $\rightarrow$ **Environment Variables** and add:
+   - `DATABASE_URL`: Your hosted PostgreSQL connection string.
+   - `JWT_SECRET`: A secure random secret key.
+   - `NEXT_PUBLIC_APP_URL`: Your Vercel deployment URL (e.g., `https://numberlive.vercel.app`).
+   - `NEXT_PUBLIC_SITE_NAME`: `NumberLive`.
+4. Vercel automatically runs `prisma generate && next build` as configured in `package.json`.
+5. Trigger initial database seeding from your local machine targeting the hosted database:
+   ```bash
+   DATABASE_URL="your-production-postgresql-url" npm run seed
+   ```
 
 ---
 

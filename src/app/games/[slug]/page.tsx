@@ -16,27 +16,36 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const game = await prisma.game.findUnique({
-    where: { slug: params.slug },
-  });
+  try {
+    const game = await prisma.game.findUnique({
+      where: { slug: params.slug },
+    });
 
-  if (!game) {
-    return constructMetadata({ title: 'Game Not Found' });
+    if (!game) {
+      return constructMetadata({ title: 'Game Not Found' });
+    }
+
+    return constructMetadata({
+      title: `${game.name} Results & Historical Chart`,
+      description: `Check live ${game.name} published number results, daily announcement timetable (${game.resultTime}), and complete historical monthly charts. Non-gambling informational archive.`,
+      path: `/games/${game.slug}`,
+    });
+  } catch (err) {
+    return constructMetadata({ title: 'Game Results & Records - NumberLive' });
   }
-
-  return constructMetadata({
-    title: `${game.name} Results & Historical Chart`,
-    description: `Check live ${game.name} published number results, daily announcement timetable (${game.resultTime}), and complete historical monthly charts. Non-gambling informational archive.`,
-    path: `/games/${game.slug}`,
-  });
 }
 
 export const revalidate = 10;
 
 export default async function GameDetailPage({ params }: Props) {
-  const game = await prisma.game.findUnique({
-    where: { slug: params.slug },
-  });
+  let game = null;
+  try {
+    game = await prisma.game.findUnique({
+      where: { slug: params.slug },
+    });
+  } catch (err) {
+    console.warn('Prisma query warning on /games/[slug]:', err);
+  }
 
   if (!game) {
     notFound();
@@ -45,59 +54,68 @@ export default async function GameDetailPage({ params }: Props) {
   const todayStr = '2026-09-17';
   const yesterdayStr = getYesterdayYYYYMMDD(todayStr);
 
-  const todayResult = await prisma.result.findUnique({
-    where: {
-      gameId_resultDate: {
-        gameId: game.id,
-        resultDate: todayStr,
+  let todayResult = null;
+  let yesterdayResult = null;
+  let allGames: any[] = [];
+  let summary: any[] = [];
+
+  try {
+    todayResult = await prisma.result.findUnique({
+      where: {
+        gameId_resultDate: {
+          gameId: game.id,
+          resultDate: todayStr,
+        },
       },
-    },
-  });
+    });
 
-  const yesterdayResult = await prisma.result.findUnique({
-    where: {
-      gameId_resultDate: {
-        gameId: game.id,
-        resultDate: yesterdayStr,
+    yesterdayResult = await prisma.result.findUnique({
+      where: {
+        gameId_resultDate: {
+          gameId: game.id,
+          resultDate: yesterdayStr,
+        },
       },
-    },
-  });
+    });
 
-  const allGames = await prisma.game.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-  });
+    allGames = await prisma.game.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
 
-  const allTodayResults = await prisma.result.findMany({
-    where: { resultDate: todayStr },
-  });
-  const allYesterdayResults = await prisma.result.findMany({
-    where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
-  });
+    const allTodayResults = await prisma.result.findMany({
+      where: { resultDate: todayStr },
+    });
+    const allYesterdayResults = await prisma.result.findMany({
+      where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
+    });
 
-  const resultMap: Record<string, { today: any; yesterday: any }> = {};
-  allGames.forEach((g) => {
-    resultMap[g.id] = { today: null, yesterday: null };
-  });
-  allTodayResults.forEach((r) => {
-    if (resultMap[r.gameId]) resultMap[r.gameId].today = r;
-  });
-  allYesterdayResults.forEach((r) => {
-    if (resultMap[r.gameId]) resultMap[r.gameId].yesterday = r;
-  });
+    const resultMap: Record<string, { today: any; yesterday: any }> = {};
+    allGames.forEach((g) => {
+      resultMap[g.id] = { today: null, yesterday: null };
+    });
+    allTodayResults.forEach((r) => {
+      if (resultMap[r.gameId]) resultMap[r.gameId].today = r;
+    });
+    allYesterdayResults.forEach((r) => {
+      if (resultMap[r.gameId]) resultMap[r.gameId].yesterday = r;
+    });
 
-  const summary = allGames.map((g) => {
-    const t = resultMap[g.id]?.today;
-    const y = resultMap[g.id]?.yesterday;
-    return {
-      game: g,
-      yesterdayResult: y ? y.resultValue : null,
-      todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
-      status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
-      resultTime: g.resultTime,
-      updatedAt: t ? t.updatedAt : null,
-    };
-  });
+    summary = allGames.map((g) => {
+      const t = resultMap[g.id]?.today;
+      const y = resultMap[g.id]?.yesterday;
+      return {
+        game: g,
+        yesterdayResult: y ? y.resultValue : null,
+        todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
+        status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
+        resultTime: g.resultTime,
+        updatedAt: t ? t.updatedAt : null,
+      };
+    });
+  } catch (err) {
+    console.warn('Prisma query warning on /games/[slug] summary:', err);
+  }
 
   const relatedGames = allGames.filter((g) => g.slug !== game.slug).slice(0, 3);
 
