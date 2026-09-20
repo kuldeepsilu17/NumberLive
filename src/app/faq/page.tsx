@@ -13,10 +13,15 @@ export const metadata: Metadata = constructMetadata({
 export const revalidate = 30;
 
 export default async function FaqPage() {
-  const faqs = await prisma.fAQ.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-  });
+  let faqs: any[] = [];
+  try {
+    faqs = await prisma.fAQ.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+  } catch (err) {
+    console.warn('Prisma query warning on /faq:', err);
+  }
 
   const categories = Array.from(new Set(faqs.map((f) => f.category)));
 

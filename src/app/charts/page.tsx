@@ -15,11 +15,16 @@ export const metadata: Metadata = constructMetadata({
 export const revalidate = 10;
 
 export default async function ChartsPage() {
-  const games = await prisma.game.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-    include: { category: true },
-  });
+  let games: any[] = [];
+  try {
+    games = await prisma.game.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      include: { category: true },
+    });
+  } catch (err) {
+    console.warn('Prisma query warning on /charts:', err);
+  }
 
   return (
     <div className="space-y-6 sm:space-y-8">

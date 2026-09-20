@@ -28,62 +28,67 @@ async function getInitialData() {
   const todayStr = '2026-09-17';
   const yesterdayStr = getYesterdayYYYYMMDD(todayStr);
 
-  const [games, todayResults, yesterdayResults, siteSettings, faqs] = await Promise.all([
-    prisma.game.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      include: { category: true },
-    }),
-    prisma.result.findMany({
-      where: { resultDate: todayStr },
-    }),
-    prisma.result.findMany({
-      where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
-    }),
-    prisma.siteSetting.findMany(),
-    prisma.fAQ.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      take: 4,
-    }),
-  ]);
+  try {
+    const [games, todayResults, yesterdayResults, siteSettings, faqs] = await Promise.all([
+      prisma.game.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        include: { category: true },
+      }),
+      prisma.result.findMany({
+        where: { resultDate: todayStr },
+      }),
+      prisma.result.findMany({
+        where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
+      }),
+      prisma.siteSetting.findMany(),
+      prisma.fAQ.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        take: 4,
+      }),
+    ]);
 
-  const settingsMap: Record<string, string> = {};
-  siteSettings.forEach((s) => {
-    settingsMap[s.key] = s.value;
-  });
+    const settingsMap: Record<string, string> = {};
+    siteSettings.forEach((s) => {
+      settingsMap[s.key] = s.value;
+    });
 
-  const resultMap: Record<string, { today: any; yesterday: any }> = {};
-  games.forEach((g) => {
-    resultMap[g.id] = { today: null, yesterday: null };
-  });
+    const resultMap: Record<string, { today: any; yesterday: any }> = {};
+    games.forEach((g) => {
+      resultMap[g.id] = { today: null, yesterday: null };
+    });
 
-  todayResults.forEach((r) => {
-    if (resultMap[r.gameId]) {
-      resultMap[r.gameId].today = r;
-    }
-  });
+    todayResults.forEach((r) => {
+      if (resultMap[r.gameId]) {
+        resultMap[r.gameId].today = r;
+      }
+    });
 
-  yesterdayResults.forEach((r) => {
-    if (resultMap[r.gameId]) {
-      resultMap[r.gameId].yesterday = r;
-    }
-  });
+    yesterdayResults.forEach((r) => {
+      if (resultMap[r.gameId]) {
+        resultMap[r.gameId].yesterday = r;
+      }
+    });
 
-  const summary = games.map((game) => {
-    const t = resultMap[game.id]?.today;
-    const y = resultMap[game.id]?.yesterday;
-    return {
-      game,
-      yesterdayResult: y ? y.resultValue : null,
-      todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
-      status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
-      resultTime: game.resultTime,
-      updatedAt: t ? t.updatedAt : null,
-    };
-  });
+    const summary = games.map((game) => {
+      const t = resultMap[game.id]?.today;
+      const y = resultMap[game.id]?.yesterday;
+      return {
+        game,
+        yesterdayResult: y ? y.resultValue : null,
+        todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
+        status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
+        resultTime: game.resultTime,
+        updatedAt: t ? t.updatedAt : null,
+      };
+    });
 
-  return { summary, todayStr, yesterdayStr, games, settingsMap, faqs };
+    return { summary, todayStr, yesterdayStr, games, settingsMap, faqs };
+  } catch (err) {
+    console.warn('Prisma query warning on homepage:', err);
+    return { summary: [], todayStr, yesterdayStr, games: [], settingsMap: {}, faqs: [] };
+  }
 }
 
 export default async function HomePage() {

@@ -12,9 +12,14 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 export default async function AboutPage() {
-  const pageContent = await prisma.pageContent.findUnique({
-    where: { key: 'about' },
-  });
+  let pageContent = null;
+  try {
+    pageContent = await prisma.pageContent.findUnique({
+      where: { key: 'about' },
+    });
+  } catch (err) {
+    console.warn('Prisma query warning on /about:', err);
+  }
 
   let contentData: any = null;
   if (pageContent) {
