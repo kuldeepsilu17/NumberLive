@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { POST as handleResultsPOST, PUT as handleResultsPUT, DELETE as handleResultsDELETE, GET as handleResultsGET } from '../..//results/route';
+import { POST as handleResultsPOST, PUT as handleResultsPUT, DELETE as handleResultsDELETE, GET as handleResultsGET } from '../../results/route';
 
 export const dynamic = 'force-dynamic';
 
