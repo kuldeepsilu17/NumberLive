@@ -1,53 +1,42 @@
 import React from 'react';
 import Link from 'next/link';
-import {
-  Clock,
-  CheckCircle2,
-  HelpCircle,
-  ArrowRight,
-  ShieldCheck,
-  FileSpreadsheet,
-  Calendar,
-  Layers,
-} from 'lucide-react';
 import prisma from '@/lib/prisma';
-import { getYesterdayYYYYMMDD } from '@/lib/utils';
-import LiveTicker from '@/components/home/LiveTicker';
-import NoticeBoard from '@/components/home/NoticeBoard';
-import TodayResultsGrid from '@/components/home/TodayResultsGrid';
-import LatestResultsTable from '@/components/home/LatestResultsTable';
-import GameScheduleTable from '@/components/home/GameScheduleTable';
-import AllGamesBoxes from '@/components/home/AllGamesBoxes';
-import MonthlyMatrix from '@/components/charts/MonthlyMatrix';
-import YearlyMatrix from '@/components/charts/YearlyMatrix';
-import RightSidebar from '@/components/layout/RightSidebar';
+import { formatDateToYYYYMMDD, getYesterdayYYYYMMDD } from '@/lib/utils';
+import SimpleResultsPortal, { GameSummaryItem } from '@/components/home/SimpleResultsPortal';
+import { ArrowRight } from 'lucide-react';
 
 export const revalidate = 10;
 
-async function getInitialData() {
-  const todayStr = '2026-09-17';
+// Default initial games to display gracefully if DB is spinning up
+const DEFAULT_FALLBACK_GAMES = [
+  { id: 'g-desawar', name: 'Desawar', slug: 'desawar', resultTime: '05:15 AM', description: 'Desawar Morning Record' },
+  { id: 'g-delhibazar', name: 'Delhi Bazar', slug: 'delhi-bazar', resultTime: '03:15 PM', description: 'Delhi Bazar Record' },
+  { id: 'g-faridabad', name: 'Faridabad', slug: 'faridabad', resultTime: '06:15 PM', description: 'Faridabad Evening Record' },
+  { id: 'g-ghaziabad', name: 'Ghaziabad', slug: 'ghaziabad', resultTime: '08:30 PM', description: 'Ghaziabad Record' },
+  { id: 'g-gali', name: 'Gali', slug: 'gali', resultTime: '11:15 PM', description: 'Gali Night Record' },
+];
+
+async function getHomePageData() {
+  const now = new Date();
+  const todayStr = formatDateToYYYYMMDD(now);
   const yesterdayStr = getYesterdayYYYYMMDD(todayStr);
 
   try {
-    const [games, todayResults, yesterdayResults, siteSettings, faqs] = await Promise.all([
+    const [games, todayResults, yesterdayResults, siteSettings] = await Promise.all([
       prisma.game.findMany({
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
-        include: { category: true },
       }),
       prisma.result.findMany({
-        where: { resultDate: todayStr },
+        where: { resultDate: todayStr, status: 'PUBLISHED' },
       }),
       prisma.result.findMany({
         where: { resultDate: yesterdayStr, status: 'PUBLISHED' },
       }),
       prisma.siteSetting.findMany(),
-      prisma.fAQ.findMany({
-        where: { isActive: true },
-        orderBy: { sortOrder: 'asc' },
-        take: 4,
-      }),
     ]);
+
+    const activeGames = games.length > 0 ? games : DEFAULT_FALLBACK_GAMES;
 
     const settingsMap: Record<string, string> = {};
     siteSettings.forEach((s) => {
@@ -55,7 +44,7 @@ async function getInitialData() {
     });
 
     const resultMap: Record<string, { today: any; yesterday: any }> = {};
-    games.forEach((g) => {
+    activeGames.forEach((g) => {
       resultMap[g.id] = { today: null, yesterday: null };
     });
 
@@ -71,155 +60,105 @@ async function getInitialData() {
       }
     });
 
-    const summary = games.map((game) => {
+    const summary: GameSummaryItem[] = activeGames.map((game) => {
       const t = resultMap[game.id]?.today;
       const y = resultMap[game.id]?.yesterday;
       return {
-        game,
+        game: {
+          id: game.id,
+          name: game.name,
+          slug: game.slug,
+          resultTime: game.resultTime,
+          description: game.description || '',
+        },
         yesterdayResult: y ? y.resultValue : null,
-        todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
-        status: t ? (t.status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
+        todayResult: t ? t.resultValue : null,
+        status: t ? 'PUBLISHED' : 'PENDING',
         resultTime: game.resultTime,
         updatedAt: t ? t.updatedAt : null,
       };
     });
 
-    return { summary, todayStr, yesterdayStr, games, settingsMap, faqs };
+    return {
+      summary,
+      todayStr,
+      yesterdayStr,
+      games: activeGames,
+      noticeText: settingsMap['notice_board'] || '',
+      lastUpdated: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    };
   } catch (err) {
-    console.warn('Prisma query warning on homepage:', err);
-    return { summary: [], todayStr, yesterdayStr, games: [], settingsMap: {}, faqs: [] };
+    console.warn('Prisma query warning on homepage, using default structure:', err);
+    const summary: GameSummaryItem[] = DEFAULT_FALLBACK_GAMES.map((game) => ({
+      game,
+      yesterdayResult: null,
+      todayResult: null,
+      status: 'PENDING',
+      resultTime: game.resultTime,
+      updatedAt: null,
+    }));
+
+    return {
+      summary,
+      todayStr,
+      yesterdayStr,
+      games: DEFAULT_FALLBACK_GAMES,
+      noticeText: '',
+      lastUpdated: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    };
   }
 }
 
 export default async function HomePage() {
-  const { summary, todayStr, yesterdayStr, games, settingsMap, faqs } = await getInitialData();
+  const { summary, todayStr, yesterdayStr, games, noticeText, lastUpdated } =
+    await getHomePageData();
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* 1. Live Ticker for Immediate Result Updates */}
-      <div>
-        <LiveTicker summary={summary} />
-      </div>
+    <div className="space-y-6 max-w-5xl mx-auto py-2">
+      {/* Notice Banner if published by owner */}
+      {noticeText && (
+        <div className="bg-white dark:bg-[#111113] border border-[#E5E5E5] dark:border-[#27272A] p-3 rounded-[6px] text-xs text-[#52525B] dark:text-[#A1A1AA]">
+          <span>{noticeText}</span>
+        </div>
+      )}
 
-      {/* Main Grid Layout: Mobile-first 1-column, Desktop 12-column with sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-        {/* Left Column: Direct Results & High Information Density */}
-        <div className="lg:col-span-8 xl:col-span-9 space-y-8 sm:space-y-10">
-          {/* 2. Notice & Update Board */}
-          <NoticeBoard
-            noticeText={settingsMap['notice_board']}
-            alertBanner={settingsMap['alert_banner']}
-          />
+      {/* Main Results-First List */}
+      <SimpleResultsPortal
+        initialSummary={summary}
+        todayDateStr={todayStr}
+        yesterdayDateStr={yesterdayStr}
+        lastUpdatedStr={lastUpdated}
+      />
 
-          {/* 3. Today's Results Grid (Immediate first-screen visibility) */}
-          <TodayResultsGrid
-            initialSummary={summary}
-            dateStr={todayStr}
-            yesterdayDateStr={yesterdayStr}
-          />
-
-          {/* 4. Latest Published Results Table / Mobile Cards */}
-          <LatestResultsTable summary={summary} dateStr={todayStr} />
-
-          {/* 5. Game Announcement Schedule Timetable */}
-          <GameScheduleTable summary={summary} dateStr={todayStr} />
-
-          {/* 6. All Regional Games Directory */}
-          <AllGamesBoxes games={games} summary={summary} />
-
-          {/* 7. Monthly Results Matrix Grid */}
-          <MonthlyMatrix initialYear={2026} initialMonth={9} />
-
-          {/* 8. Yearly Chart Interactive Selector */}
-          <YearlyMatrix
-            initialGameSlug="delhi"
-            initialYear={2026}
-            gamesList={games.map((g) => ({ id: g.id, name: g.name, slug: g.slug }))}
-          />
-
-          {/* 9. Key System Values & Standards */}
-          <section className="bg-white dark:bg-[#111113] border border-[#EAE3D5] dark:border-[#2E2E33] rounded-[9px] p-4 sm:p-5 shadow-subtle space-y-3">
-            <div className="section-header-clean flex items-center gap-2 text-xs sm:text-sm font-black">
-              <ShieldCheck className="w-4 h-4 text-[#C5A059]" />
-              <h3 className="text-[#111113] dark:text-[#FAF8F5] uppercase tracking-wider">
-                NUMBERLIVE PUBLIC DATA &amp; TIMETABLE STANDARDS
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3.5 rounded-[8px] bg-[#FAF8F5] dark:bg-[#18181B] border border-[#EAE3D5] dark:border-[#2E2E33] space-y-1">
-                <span className="font-bold text-[#111113] dark:text-[#FAF8F5] flex items-center gap-1.5 text-xs sm:text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
-                  Uniform Verification
-                </span>
-                <p className="text-[#71717A] dark:text-[#A1A1AA] text-xs leading-relaxed">
-                  Simultaneous public record announcements verified across regional release timetables.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-[8px] bg-[#FAF8F5] dark:bg-[#18181B] border border-[#EAE3D5] dark:border-[#2E2E33] space-y-1">
-                <span className="font-bold text-[#111113] dark:text-[#FAF8F5] flex items-center gap-1.5 text-xs sm:text-sm">
-                  <Clock className="w-4 h-4 text-[#C5A059]" />
-                  Synchronised Release
-                </span>
-                <p className="text-[#71717A] dark:text-[#A1A1AA] text-xs leading-relaxed">
-                  Daily schedules maintained from morning to night without prediction manipulation.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-[8px] bg-[#FAF8F5] dark:bg-[#18181B] border border-[#EAE3D5] dark:border-[#2E2E33] space-y-1">
-                <span className="font-bold text-[#111113] dark:text-[#FAF8F5] flex items-center gap-1.5 text-xs sm:text-sm">
-                  <FileSpreadsheet className="w-4 h-4 text-[#C5A059]" />
-                  Open Data Export
-                </span>
-                <p className="text-[#71717A] dark:text-[#A1A1AA] text-xs leading-relaxed">
-                  Download historical CSV datasets directly for independent statistical research.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* 10. Frequently Asked Questions Preview */}
-          <section className="bg-white dark:bg-[#111113] border border-[#EAE3D5] dark:border-[#2E2E33] rounded-[9px] p-4 sm:p-5 shadow-subtle space-y-3">
-            <div className="flex items-center justify-between border-b border-[#EAE3D5] dark:border-[#2E2E33] pb-3">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="w-4 h-4 text-[#C5A059]" />
-                <h3 className="text-xs sm:text-sm font-black text-[#111113] dark:text-[#FAF8F5] uppercase tracking-wide">
-                  Frequently Asked Questions
-                </h3>
-              </div>
-              <Link
-                href="/faq"
-                className="min-h-[44px] px-2 text-xs font-bold text-[#C5A059] hover:underline inline-flex items-center gap-1"
-              >
-                <span>View All FAQ</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#5C5449] dark:text-[#A1A1AA]">
-              {faqs.map((faq) => (
-                <div
-                  key={faq.id}
-                  className="p-3.5 bg-[#FAF8F5] dark:bg-[#18181B] rounded-[8px] border border-[#EAE3D5] dark:border-[#2E2E33] space-y-1"
-                >
-                  <h4 className="font-bold text-[#111113] dark:text-[#FAF8F5] text-xs sm:text-sm">
-                    {faq.question}
-                  </h4>
-                  <p className="text-xs leading-relaxed text-[#71717A] dark:text-[#A1A1AA]">
-                    {faq.answer}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+      {/* Record Charts Section */}
+      <div className="bg-white dark:bg-[#111113] rounded-[8px] border border-[#E5E5E5] dark:border-[#27272A] p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="border-b border-[#E5E5E5] dark:border-[#27272A] pb-3">
+          <h2 className="text-base font-bold text-[#20201E] dark:text-[#FAF8F5]">
+            Record Charts
+          </h2>
+          <p className="text-xs text-[#71717A] dark:text-[#A1A1AA] mt-0.5">
+            Browse published historical records by game.
+          </p>
         </div>
 
-        {/* Right Sidebar Column (Desktop sticky, mobile stacks cleanly below) */}
-        <div className="lg:col-span-4 xl:col-span-3">
-          <div className="lg:sticky lg:top-20">
-            <RightSidebar summary={summary} />
-          </div>
+        <div className="divide-y divide-[#E5E5E5] dark:divide-[#27272A]">
+          {games.map((game) => (
+            <div
+              key={game.id}
+              className="py-2.5 flex items-center justify-between hover:bg-[#FAF8F5]/60 dark:hover:bg-[#161619] transition-colors"
+            >
+              <span className="text-sm font-semibold text-[#20201E] dark:text-[#FAF8F5]">
+                {game.name}
+              </span>
+              <Link
+                href={`/charts/${game.slug}`}
+                className="text-xs font-semibold text-[#71717A] hover:text-[#C5A059] dark:text-[#A1A1AA] dark:hover:text-[#C5A059] inline-flex items-center gap-1 transition-colors"
+              >
+                <span>View Chart</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          ))}
         </div>
       </div>
     </div>

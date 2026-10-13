@@ -4,21 +4,23 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Menu,
+  X,
   Search,
   Moon,
   Sun,
-  Lock,
-  Menu,
-  X,
-  Radio,
   ChevronRight,
+  Globe,
 } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
 import SearchModal from '../search/SearchModal';
 
 export default function Header() {
   const pathname = usePathname();
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { currentLanguage, setLanguage, languages } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -34,22 +36,10 @@ export default function Header() {
     }
   }, []);
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
+    setLangMenuOpen(false);
   }, [pathname]);
-
-  // Prevent background scroll when mobile menu is open
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileMenuOpen]);
 
   const toggleDarkMode = () => {
     const next = !darkMode;
@@ -63,72 +53,63 @@ export default function Header() {
     }
   };
 
+  // If on /owner routes, public header is not rendered (owner layout has its own header)
+  if (pathname?.startsWith('/owner')) {
+    return null;
+  }
+
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Results', href: '/results' },
     { name: 'Charts', href: '/charts' },
-    { name: 'Games', href: '/games' },
     { name: 'History', href: '/history' },
-    { name: 'FAQ', href: '/faq' },
-    { name: 'Contact', href: '/contact' },
   ];
 
   const isLinkActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    if (href === '/charts') return pathname === '/charts' || pathname.startsWith('/monthly-chart');
     return pathname.startsWith(href);
   };
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full bg-[#111113] text-white border-b border-[#2E2E33] shadow-header select-none">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-[60px] sm:h-[64px]">
-            {/* 1. Mobile Left: Hamburger Button (44×44px touch area) */}
+      <header className="sticky top-0 z-40 w-full bg-[#111113] text-white border-b border-[#27272A] shadow-xs select-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6">
+          <div className="flex items-center justify-between h-[52px]">
+            {/* 1. Mobile Hamburger */}
             <div className="flex items-center md:hidden">
               <button
                 onClick={() => setMobileMenuOpen(true)}
-                className="w-11 h-11 flex items-center justify-center text-[#FAF8F5] hover:text-[#C5A059] active:bg-[#18181B] rounded-[6px] transition-colors -ml-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059]"
-                aria-label="Open Navigation Menu"
-                id="mobile-nav-toggle"
+                className="w-10 h-10 flex items-center justify-center text-[#E4E4E7] hover:text-[#C5A059] rounded transition-colors"
+                aria-label="Open Menu"
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-5 h-5" />
               </button>
             </div>
 
-            {/* 2. Brand Logo (Centered on mobile, Left-aligned on desktop) */}
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group py-1">
-                <div className="w-8 h-8 rounded-[5px] bg-[#18181B] border border-[#C5A059] flex items-center justify-center text-[#C5A059] font-black text-xs sm:text-sm tracking-wider shadow-xs group-hover:border-[#DFBD76] transition-colors">
+            {/* 2. Logo */}
+            <div className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2 group">
+                <div className="w-7 h-7 rounded bg-[#C5A059] flex items-center justify-center text-black font-black text-xs tracking-wider shadow-xs">
                   NL
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-black text-base sm:text-lg tracking-tight text-[#FAF8F5] uppercase leading-none font-sans flex items-center gap-1.5">
-                    NUMBER<span className="text-[#C5A059]">LIVE</span>
-                    <span className="hidden xl:inline-flex items-center gap-1 text-[9px] bg-[#16A34A]/20 text-[#4ADE80] border border-[#16A34A]/40 px-1 py-0.2 rounded font-bold uppercase">
-                      <Radio className="w-2.5 h-2.5 animate-pulse" />
-                      Live
-                    </span>
-                  </span>
-                  <span className="text-[9px] text-[#A1A1AA] font-semibold tracking-wider uppercase mt-0.5 hidden sm:block">
-                    Official Public Records Portal
-                  </span>
-                </div>
+                <span className="font-black text-base sm:text-lg tracking-tight uppercase leading-none">
+                  NUMBER<span className="text-[#C5A059]">LIVE</span>
+                </span>
               </Link>
             </div>
 
-            {/* 3. Center: Desktop Unified Navigation Bar (Hidden on mobile) */}
-            <nav className="hidden md:flex items-center gap-1 lg:gap-1.5" aria-label="Desktop Navigation">
+            {/* 3. Desktop Navigation Links */}
+            <nav className="hidden md:flex items-center gap-1">
               {navLinks.map((link) => {
                 const active = isLinkActive(link.href);
                 return (
                   <Link
                     key={link.name}
                     href={link.href}
-                    className={`relative px-3 py-2 text-[13px] font-bold tracking-wide transition-all rounded-[6px] min-h-[44px] flex items-center ${
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${
                       active
-                        ? 'text-[#C5A059] bg-[#18181B] border-b-2 border-[#C5A059]'
-                        : 'text-[#FAF8F5] hover:text-[#C5A059] hover:bg-[#18181B]'
+                        ? 'text-[#C5A059] bg-[#1F1F23]'
+                        : 'text-[#D4D4D8] hover:text-white hover:bg-[#18181B]'
                     }`}
                   >
                     {link.name}
@@ -137,78 +118,89 @@ export default function Header() {
               })}
             </nav>
 
-            {/* 4. Right: Search & Actions (44×44px touch areas on mobile) */}
+            {/* 4. Right Controls: Search, Language, Theme */}
             <div className="flex items-center gap-1 sm:gap-2">
-              {/* Search Button (44×44px touch target on mobile) */}
+              {/* Search Button */}
               <button
                 onClick={() => setSearchModalOpen(true)}
-                className="w-11 h-11 sm:w-auto sm:h-9 sm:px-3 flex items-center justify-center gap-2 text-[#FAF8F5] bg-[#18181B] hover:bg-[#222226] hover:text-[#C5A059] hover:border-[#C5A059]/50 rounded-[6px] border border-[#2E2E33] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059]"
-                title="Search records (Ctrl+K)"
-                aria-label="Search records"
-                id="search-btn-header"
+                className="w-9 h-9 flex items-center justify-center text-[#A1A1AA] hover:text-[#C5A059] hover:bg-[#18181B] rounded transition-colors"
+                title="Search games"
+                aria-label="Search"
               >
-                <Search className="w-4 h-4 text-[#C5A059]" />
-                <span className="hidden sm:inline text-xs font-semibold">Search</span>
-                <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[9px] bg-[#111113] border border-[#2E2E33] rounded text-[#71717A] font-mono">
-                  Ctrl+K
-                </kbd>
+                <Search className="w-4 h-4" />
               </button>
 
-              {/* Theme Toggle (44×44px touch target on mobile) */}
+              {/* Language Selector Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setLangMenuOpen(!langMenuOpen)}
+                  className="flex items-center gap-1 h-8 px-2 text-[11px] font-bold text-[#E4E4E7] bg-[#18181B] hover:bg-[#222226] border border-[#2E2E33] rounded transition-colors"
+                  title="Select Language"
+                >
+                  <Globe className="w-3.5 h-3.5 text-[#C5A059]" />
+                  <span className="uppercase">{currentLanguage.code}</span>
+                </button>
+
+                {langMenuOpen && (
+                  <div className="absolute right-0 mt-1 w-36 bg-[#18181B] border border-[#2E2E33] rounded-[6px] py-1 shadow-xl z-50 animate-in fade-in duration-100">
+                    {languages.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => {
+                          setLanguage(lang.code);
+                          setLangMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center justify-between ${
+                          currentLanguage.code === lang.code
+                            ? 'text-[#C5A059] bg-[#222226] font-bold'
+                            : 'text-[#D4D4D8] hover:bg-[#27272A] hover:text-white'
+                        }`}
+                      >
+                        <span>{lang.name}</span>
+                        <span className="text-[10px] text-[#71717A] uppercase">{lang.code}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Dark/Light toggle */}
               <button
                 onClick={toggleDarkMode}
-                aria-label="Toggle light and dark theme"
-                className="w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center text-[#A1A1AA] hover:text-[#C5A059] hover:bg-[#18181B] rounded-[6px] border border-transparent hover:border-[#2E2E33] transition-colors focus:outline-none"
+                className="w-8 h-8 flex items-center justify-center text-[#A1A1AA] hover:text-[#C5A059] rounded transition-colors"
+                title="Toggle Theme"
+                aria-label="Toggle Theme"
               >
-                {darkMode ? <Sun className="w-4 h-4 text-[#C5A059]" /> : <Moon className="w-4 h-4" />}
+                {darkMode ? <Sun className="w-3.5 h-3.5 text-[#C5A059]" /> : <Moon className="w-3.5 h-3.5" />}
               </button>
-
-              {/* Admin Button (Desktop only on right bar, also in mobile menu) */}
-              <Link
-                href="/admin"
-                className="hidden md:inline-flex items-center gap-1.5 h-9 px-3 text-xs font-bold text-[#FAF8F5] bg-[#18181B] hover:bg-[#222226] hover:text-[#C5A059] hover:border-[#C5A059]/50 rounded-[6px] border border-[#2E2E33] transition-colors"
-                title="Admin Control Desk"
-                aria-label="Admin Control Desk"
-              >
-                <Lock className="w-3.5 h-3.5 text-[#C5A059]" />
-                <span>Admin</span>
-              </Link>
             </div>
           </div>
         </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-           FULL-WIDTH CLEAN MOBILE NAVIGATION PANEL
-           ───────────────────────────────────────────────────────────── */}
+        {/* Mobile Navigation Menu */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-[#111113]/95 backdrop-blur-md animate-in fade-in duration-200">
-            {/* Mobile Drawer Top Bar */}
-            <div className="flex items-center justify-between px-4 h-[60px] border-b border-[#2E2E33] bg-[#111113]">
+          <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-[#111113]/95 backdrop-blur-md animate-in fade-in duration-150">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between px-4 h-[52px] border-b border-[#27272A] bg-[#111113]">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-[4px] bg-[#18181B] border border-[#C5A059] flex items-center justify-center text-[#C5A059] font-black text-xs">
+                <div className="w-6 h-6 rounded bg-[#C5A059] flex items-center justify-center text-black font-black text-xs">
                   NL
                 </div>
-                <span className="font-black text-base tracking-tight text-[#FAF8F5] uppercase">
+                <span className="font-black text-base uppercase">
                   NUMBER<span className="text-[#C5A059]">LIVE</span>
                 </span>
               </div>
-
-              {/* Close Button (44×44px touch area) */}
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="w-11 h-11 flex items-center justify-center text-[#A1A1AA] hover:text-white active:bg-[#18181B] rounded-[6px] transition-colors focus:outline-none"
-                aria-label="Close Navigation Menu"
+                className="w-9 h-9 flex items-center justify-center text-[#A1A1AA] hover:text-white rounded"
+                aria-label="Close menu"
               >
-                <X className="w-6 h-6 text-[#C5A059]" />
+                <X className="w-5 h-5 text-[#C5A059]" />
               </button>
             </div>
 
-            {/* Mobile Menu Links (Each minimum 48px height) */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5">
-              <div className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider px-3 mb-2">
-                Navigation Menu
-              </div>
-
+            {/* Links */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-1">
               {navLinks.map((link) => {
                 const active = isLinkActive(link.href);
                 return (
@@ -216,10 +208,10 @@ export default function Header() {
                     key={link.name}
                     href={link.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center justify-between min-h-[48px] px-3.5 py-2.5 rounded-[8px] text-sm font-bold tracking-wide transition-all ${
+                    className={`flex items-center justify-between min-h-[44px] px-3.5 rounded text-sm font-bold tracking-wide transition-colors ${
                       active
-                        ? 'bg-[#18181B] text-[#C5A059] border-l-4 border-[#C5A059] shadow-xs'
-                        : 'text-[#FAF8F5] hover:bg-[#18181B] hover:text-[#C5A059] active:bg-[#222226]'
+                        ? 'bg-[#1F1F23] text-[#C5A059]'
+                        : 'text-[#E4E4E7] hover:bg-[#18181B]'
                     }`}
                   >
                     <span>{link.name}</span>
@@ -228,40 +220,23 @@ export default function Header() {
                 );
               })}
 
-              {/* Search in Menu */}
-              <div className="pt-3 mt-3 border-t border-[#2E2E33] space-y-2">
+              <div className="pt-4 mt-4 border-t border-[#27272A] space-y-2">
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
                     setSearchModalOpen(true);
                   }}
-                  className="w-full flex items-center justify-between min-h-[48px] px-3.5 py-2.5 rounded-[8px] text-sm font-bold bg-[#18181B] text-[#FAF8F5] border border-[#2E2E33] hover:border-[#C5A059] transition-colors"
+                  className="w-full flex items-center gap-2.5 min-h-[44px] px-3.5 rounded bg-[#18181B] text-xs font-bold text-[#E4E4E7] border border-[#27272A]"
                 >
-                  <span className="flex items-center gap-2">
-                    <Search className="w-4 h-4 text-[#C5A059]" />
-                    <span>Search Records &amp; Games</span>
-                  </span>
-                  <span className="text-[10px] text-[#71717A] font-mono">Open</span>
+                  <Search className="w-4 h-4 text-[#C5A059]" />
+                  <span>Search Games</span>
                 </button>
-
-                <Link
-                  href="/admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-full flex items-center justify-between min-h-[48px] px-3.5 py-2.5 rounded-[8px] text-sm font-bold bg-[#18181B] text-[#FAF8F5] border border-[#2E2E33] hover:border-[#C5A059] transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-[#C5A059]" />
-                    <span>Admin Control Desk</span>
-                  </span>
-                  <span className="text-[10px] text-[#C5A059] font-bold uppercase">Staff</span>
-                </Link>
               </div>
             </div>
 
-            {/* Mobile Footer Info */}
-            <div className="p-4 bg-[#09090B] border-t border-[#2E2E33] text-center text-xs text-[#71717A]">
-              <p className="font-semibold text-[11px]">NumberLive Public Records Portal</p>
-              <p className="text-[10px] text-[#52525B] mt-0.5">Strictly Non-Gambling Data Archive</p>
+            {/* Mobile Drawer Footer */}
+            <div className="p-3 bg-[#09090B] border-t border-[#27272A] text-center text-[11px] text-[#71717A]">
+              NumberLive • Official Results &amp; Archives
             </div>
           </div>
         )}

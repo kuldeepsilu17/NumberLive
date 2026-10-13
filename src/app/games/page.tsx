@@ -94,7 +94,7 @@ async function getGamesData(categorySlug?: string) {
 }
 
 export default async function GamesPage({ searchParams }: PageProps) {
-  const { games, categories, summary, activeCategory } = await getGamesData(searchParams.category);
+  const { games, categories, summary, activeCategory } = await getGamesData(searchParams?.category);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">

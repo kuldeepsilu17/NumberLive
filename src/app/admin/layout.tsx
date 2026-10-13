@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   CalendarPlus,
+  PlusCircle,
   Gamepad2,
   FolderTree,
   Grid3X3,
@@ -33,6 +34,7 @@ export default function AdminLayout({
 
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+    { name: 'New Result Entry', href: '/admin/results/new', icon: PlusCircle },
     { name: 'Results Workflow', href: '/admin/results', icon: CalendarPlus },
     { name: 'Games', href: '/admin/games', icon: Gamepad2 },
     { name: 'Categories', href: '/admin/categories', icon: FolderTree },
@@ -42,7 +44,7 @@ export default function AdminLayout({
     { name: 'FAQ Manager', href: '/admin/faq', icon: HelpCircle },
     { name: 'SEO & Meta', href: '/admin/seo', icon: Settings },
     { name: 'Site Settings', href: '/admin/settings', icon: Sliders },
-    { name: 'Audit Trail', href: '/admin/audit-logs', icon: FileCheck2 },
+    { name: 'Audit Trail', href: '/admin/audit-log', icon: FileCheck2 },
   ];
 
   const handleLogout = async () => {
@@ -92,7 +94,7 @@ export default function AdminLayout({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === '/admin/audit-log' && pathname === '/admin/audit-logs');
             return (
               <Link
                 key={item.name}
@@ -129,7 +131,7 @@ export default function AdminLayout({
         <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === '/admin/audit-log' && pathname === '/admin/audit-logs');
             return (
               <Link
                 key={item.name}

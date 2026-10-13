@@ -81,12 +81,11 @@ export default function HistoricalTable({
 
   const displayedResults = results.filter((r) => {
     if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      r.resultValue.includes(q) ||
-      r.resultDate.includes(q) ||
-      (r.game?.name && r.game.name.toLowerCase().includes(q))
-    );
+    const q = searchQuery.toLowerCase().trim();
+    const val = String(r.resultValue ?? '').toLowerCase();
+    const date = String(r.resultDate ?? '').toLowerCase();
+    const gameName = String(r.game?.name ?? '').toLowerCase();
+    return val.includes(q) || date.includes(q) || gameName.includes(q);
   });
 
   return (

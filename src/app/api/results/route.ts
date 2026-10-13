@@ -4,18 +4,25 @@ import prisma from '@/lib/prisma';
 import { getSessionAdmin } from '@/lib/auth';
 import { recordAuditLog } from '@/lib/audit';
 import { formatDateToYYYYMMDD, getYesterdayYYYYMMDD } from '@/lib/utils';
+import {
+  validateResultDate,
+  validateResultValue,
+  validateResultStatus,
+  sanitizeText,
+} from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = await getSessionAdmin();
     const { searchParams } = new URL(req.url);
     const view = searchParams.get('view');
     const date = searchParams.get('date');
     const gameSlug = searchParams.get('game');
     const year = searchParams.get('year');
     const month = searchParams.get('month');
-    const status = searchParams.get('status');
+    const statusParam = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
 
@@ -63,14 +70,17 @@ export async function GET(req: NextRequest) {
       const summary = games.map((game) => {
         const t = resultMap[game.id]?.today;
         const y = resultMap[game.id]?.yesterday;
+        const isTodayPublished = t && t.status === 'PUBLISHED';
+
         return {
           game,
           yesterdayResult: y ? y.resultValue : null,
-          todayResult: t && t.status === 'PUBLISHED' ? t.resultValue : null,
-          todayDraftResult: t ? t.resultValue : null,
-          status: t ? t.status : 'PENDING',
+          todayResult: isTodayPublished ? t.resultValue : null,
+          // Admin can inspect draft if authenticated, but public user only gets published
+          todayDraftResult: admin && t ? t.resultValue : null,
+          status: isTodayPublished ? 'PUBLISHED' : (admin && t ? t.status : 'PENDING'),
           resultTime: game.resultTime,
-          updatedAt: t ? t.updatedAt : null,
+          updatedAt: isTodayPublished ? t.updatedAt : null,
         };
       });
 
@@ -82,7 +92,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. View: Monthly Matrix (Cross-game matrix for a specific month/year)
+    // 2. View: Monthly Matrix (Cross-game matrix for a specific month/year - strictly PUBLISHED)
     if (view === 'monthly_matrix') {
       const targetYear = parseInt(year || String(new Date().getFullYear()));
       const targetMonth = parseInt(month || String(new Date().getMonth() + 1));
@@ -134,7 +144,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. View: Yearly Matrix (Single Game × 12 Months × 31 Days)
+    // 3. View: Yearly Matrix (Single Game × 12 Months × 31 Days - strictly PUBLISHED)
     if (view === 'yearly_matrix') {
       const targetYear = parseInt(year || String(new Date().getFullYear()));
       if (!gameSlug) {
@@ -161,7 +171,6 @@ export async function GET(req: NextRequest) {
         orderBy: { resultDate: 'asc' },
       });
 
-      // Matrix: matrix[day (1..31)][month (1..12)] = value
       const matrix: Record<number, Record<number, string>> = {};
       for (let day = 1; day <= 31; day++) {
         matrix[day] = {};
@@ -193,7 +202,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 4. View: Game Chart (Game-specific detailed dataset with stats)
+    // 4. View: Game Chart (Game-specific detailed dataset with stats - strictly PUBLISHED)
     if (view === 'game_chart') {
       if (!gameSlug) {
         return NextResponse.json({ error: 'Game slug is required' }, { status: 400 });
@@ -226,7 +235,6 @@ export async function GET(req: NextRequest) {
         orderBy: { resultDate: 'desc' },
       });
 
-      // Compute statistics
       const frequencyMap: Record<string, number> = {};
       results.forEach((r) => {
         frequencyMap[r.resultValue] = (frequencyMap[r.resultValue] || 0) + 1;
@@ -260,7 +268,14 @@ export async function GET(req: NextRequest) {
     // 5. General Query / History View
     const where: any = {};
     if (date) where.resultDate = date;
-    if (status) where.status = status;
+
+    // Security check: Unauthenticated public queries ONLY get PUBLISHED results
+    if (!admin) {
+      where.status = 'PUBLISHED';
+    } else if (statusParam) {
+      where.status = statusParam;
+    }
+
     if (year && month) {
       const monthPadded = String(month).padStart(2, '0');
       where.resultDate = { startsWith: `${year}-${monthPadded}` };
@@ -308,33 +323,51 @@ export async function POST(req: NextRequest) {
   try {
     const admin = await getSessionAdmin();
     if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized. Admin session required.' },
+        { status: 401 }
+      );
     }
 
     const body = await req.json();
     const { gameId, resultDate, resultValue, resultTime, status, reasonNote } = body;
 
-    if (!gameId || !resultDate || resultValue === undefined || resultValue === '') {
-      return NextResponse.json(
-        { error: 'Game, Result Date, and Result Value are required.' },
-        { status: 400 }
-      );
+    // 1. Server-side validation
+    if (!gameId) {
+      return NextResponse.json({ error: 'Game selection is required.' }, { status: 400 });
+    }
+
+    const dateVal = validateResultDate(resultDate);
+    if (!dateVal.isValid || !dateVal.value) {
+      return NextResponse.json({ error: dateVal.error }, { status: 400 });
+    }
+
+    const numVal = validateResultValue(resultValue);
+    if (!numVal.isValid || !numVal.value) {
+      return NextResponse.json({ error: numVal.error }, { status: 400 });
+    }
+
+    const statusVal = validateResultStatus(status);
+    if (!statusVal.isValid || !statusVal.value) {
+      return NextResponse.json({ error: statusVal.error }, { status: 400 });
     }
 
     const game = await prisma.game.findUnique({ where: { id: gameId } });
     if (!game) {
-      return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Game not found.' }, { status: 404 });
     }
 
-    const formattedValue = String(resultValue).trim().padStart(2, '0');
-    const resultStatus = status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED';
+    const sanitizedNote = sanitizeText(reasonNote);
+    const finalDate = dateVal.value;
+    const finalNumber = numVal.value;
+    const finalStatus = statusVal.value;
     const finalTime = resultTime || game.resultTime;
 
     const existing = await prisma.result.findUnique({
       where: {
         gameId_resultDate: {
           gameId,
-          resultDate,
+          resultDate: finalDate,
         },
       },
     });
@@ -347,18 +380,23 @@ export async function POST(req: NextRequest) {
       result = await prisma.result.update({
         where: { id: existing.id },
         data: {
-          resultValue: formattedValue,
+          resultValue: finalNumber,
           resultTime: finalTime,
-          status: resultStatus,
-          publishedAt: resultStatus === 'PUBLISHED' ? new Date() : existing.publishedAt,
+          status: finalStatus,
+          publishedAt:
+            finalStatus === 'PUBLISHED' && !existing.publishedAt
+              ? new Date()
+              : existing.publishedAt,
         },
         include: { game: true },
       });
 
       const action =
-        oldStatus === 'DRAFT' && resultStatus === 'PUBLISHED'
+        oldStatus === 'DRAFT' && finalStatus === 'PUBLISHED'
           ? 'PUBLISH_RESULT'
-          : oldVal !== formattedValue
+          : finalStatus === 'ARCHIVED'
+          ? 'ARCHIVE_RESULT'
+          : oldVal !== finalNumber
           ? 'CORRECT_RESULT'
           : 'UPDATE_RESULT';
 
@@ -368,10 +406,10 @@ export async function POST(req: NextRequest) {
         action,
         gameId: game.id,
         gameName: game.name,
-        targetDate: resultDate,
+        targetDate: finalDate,
         oldResult: oldVal,
-        newResult: formattedValue,
-        reasonNote: reasonNote || `Updated ${game.name} result for ${resultDate}`,
+        newResult: finalNumber,
+        reasonNote: sanitizedNote || `Updated ${game.name} result for ${finalDate} (${oldStatus} -> ${finalStatus})`,
         ipAddress: req.headers.get('x-forwarded-for') || '127.0.0.1',
         userAgent: req.headers.get('user-agent') || 'Browser',
       });
@@ -379,11 +417,11 @@ export async function POST(req: NextRequest) {
       result = await prisma.result.create({
         data: {
           gameId,
-          resultDate,
-          resultValue: formattedValue,
+          resultDate: finalDate,
+          resultValue: finalNumber,
           resultTime: finalTime,
-          status: resultStatus,
-          publishedAt: resultStatus === 'PUBLISHED' ? new Date() : null,
+          status: finalStatus,
+          publishedAt: finalStatus === 'PUBLISHED' ? new Date() : null,
         },
         include: { game: true },
       });
@@ -391,13 +429,13 @@ export async function POST(req: NextRequest) {
       await recordAuditLog({
         adminId: admin.id,
         adminUsername: admin.username,
-        action: resultStatus === 'PUBLISHED' ? 'PUBLISH_RESULT' : 'CREATE_RESULT',
+        action: finalStatus === 'PUBLISHED' ? 'PUBLISH_RESULT' : 'CREATE_RESULT',
         gameId: game.id,
         gameName: game.name,
-        targetDate: resultDate,
+        targetDate: finalDate,
         oldResult: null,
-        newResult: formattedValue,
-        reasonNote: reasonNote || `Entered initial ${resultStatus.toLowerCase()} result for ${game.name}`,
+        newResult: finalNumber,
+        reasonNote: sanitizedNote || `Created ${finalStatus.toLowerCase()} result for ${game.name}`,
         ipAddress: req.headers.get('x-forwarded-for') || '127.0.0.1',
         userAgent: req.headers.get('user-agent') || 'Browser',
       });
@@ -413,6 +451,7 @@ export async function POST(req: NextRequest) {
       revalidatePath('/yearly-chart');
       revalidatePath(`/games/${game.slug}`);
       revalidatePath(`/charts/${game.slug}`);
+      revalidatePath('/history');
     } catch (e) {
       console.warn('Revalidation notice:', e);
     }
@@ -428,14 +467,14 @@ export async function PUT(req: NextRequest) {
   try {
     const admin = await getSessionAdmin();
     if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized. Admin session required.' }, { status: 401 });
     }
 
     const body = await req.json();
     const { id, resultValue, status, reasonNote } = body;
 
     if (!id) {
-      return NextResponse.json({ error: 'Result ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Result ID is required.' }, { status: 400 });
     }
 
     const existing = await prisma.result.findUnique({
@@ -444,28 +483,48 @@ export async function PUT(req: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: 'Result not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Result not found.' }, { status: 404 });
     }
 
-    const formattedValue =
-      resultValue !== undefined ? String(resultValue).trim().padStart(2, '0') : existing.resultValue;
-    const newStatus = status || existing.status;
+    let finalNumber = existing.resultValue;
+    if (resultValue !== undefined && resultValue !== '') {
+      const numVal = validateResultValue(resultValue);
+      if (!numVal.isValid || !numVal.value) {
+        return NextResponse.json({ error: numVal.error }, { status: 400 });
+      }
+      finalNumber = numVal.value;
+    }
+
+    let finalStatus = existing.status;
+    if (status) {
+      const statusVal = validateResultStatus(status);
+      if (!statusVal.isValid || !statusVal.value) {
+        return NextResponse.json({ error: statusVal.error }, { status: 400 });
+      }
+      finalStatus = statusVal.value;
+    }
+
+    const sanitizedNote = sanitizeText(reasonNote);
 
     const updated = await prisma.result.update({
       where: { id },
       data: {
-        resultValue: formattedValue,
-        status: newStatus,
+        resultValue: finalNumber,
+        status: finalStatus,
         publishedAt:
-          newStatus === 'PUBLISHED' && !existing.publishedAt ? new Date() : existing.publishedAt,
+          finalStatus === 'PUBLISHED' && !existing.publishedAt ? new Date() : existing.publishedAt,
       },
       include: { game: true },
     });
 
     const action =
-      existing.status === 'PUBLISHED' && newStatus === 'DRAFT'
+      existing.status === 'DRAFT' && finalStatus === 'PUBLISHED'
+        ? 'PUBLISH_RESULT'
+        : existing.status === 'PUBLISHED' && finalStatus === 'ARCHIVED'
+        ? 'ARCHIVE_RESULT'
+        : existing.status === 'PUBLISHED' && finalStatus === 'DRAFT'
         ? 'UNPUBLISH_RESULT'
-        : existing.resultValue !== formattedValue
+        : existing.resultValue !== finalNumber
         ? 'CORRECT_RESULT'
         : 'UPDATE_RESULT';
 
@@ -477,8 +536,8 @@ export async function PUT(req: NextRequest) {
       gameName: existing.game.name,
       targetDate: existing.resultDate,
       oldResult: existing.resultValue,
-      newResult: formattedValue,
-      reasonNote: reasonNote || `Status changed to ${newStatus}`,
+      newResult: finalNumber,
+      reasonNote: sanitizedNote || `Updated result status to ${finalStatus}`,
       ipAddress: req.headers.get('x-forwarded-for') || '127.0.0.1',
       userAgent: req.headers.get('user-agent') || 'Browser',
     });
@@ -492,6 +551,7 @@ export async function PUT(req: NextRequest) {
       revalidatePath('/yearly-chart');
       revalidatePath(`/games/${existing.game.slug}`);
       revalidatePath(`/charts/${existing.game.slug}`);
+      revalidatePath('/history');
     } catch (e) {
       console.warn('Revalidation notice:', e);
     }
@@ -507,14 +567,14 @@ export async function DELETE(req: NextRequest) {
   try {
     const admin = await getSessionAdmin();
     if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized. Admin session required.' }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Result ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Result ID is required.' }, { status: 400 });
     }
 
     const existing = await prisma.result.findUnique({
@@ -523,7 +583,7 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: 'Result not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Result not found.' }, { status: 404 });
     }
 
     await prisma.result.delete({ where: { id } });
@@ -551,6 +611,7 @@ export async function DELETE(req: NextRequest) {
       revalidatePath('/yearly-chart');
       revalidatePath(`/games/${existing.game.slug}`);
       revalidatePath(`/charts/${existing.game.slug}`);
+      revalidatePath('/history');
     } catch (e) {
       console.warn('Revalidation notice:', e);
     }

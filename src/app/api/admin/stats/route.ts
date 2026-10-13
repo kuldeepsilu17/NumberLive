@@ -9,31 +9,39 @@ export async function GET() {
   try {
     const admin = await getSessionAdmin();
     if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 401 });
     }
 
-    const todayStr = '2026-09-17'; // or formatDateToYYYYMMDD()
+    const todayStr = formatDateToYYYYMMDD();
 
     const [
       totalGames,
       activeGames,
-      totalCategories,
+      totalPublished,
+      totalDrafts,
+      totalArchived,
+      totalResults,
       todayPublishedCount,
       todayDraftCount,
-      totalResultsCount,
-      unreadMessagesCount,
+      recentResults,
       recentAudits,
     ] = await Promise.all([
       prisma.game.count(),
       prisma.game.count({ where: { isActive: true } }),
-      prisma.category.count(),
+      prisma.result.count({ where: { status: 'PUBLISHED' } }),
+      prisma.result.count({ where: { status: 'DRAFT' } }),
+      prisma.result.count({ where: { status: 'ARCHIVED' } }),
+      prisma.result.count(),
       prisma.result.count({ where: { resultDate: todayStr, status: 'PUBLISHED' } }),
       prisma.result.count({ where: { resultDate: todayStr, status: 'DRAFT' } }),
-      prisma.result.count(),
-      prisma.contactMessage.count({ where: { status: 'UNREAD' } }),
+      prisma.result.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 6,
+        include: { game: true },
+      }),
       prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
-        take: 8,
+        take: 6,
       }),
     ]);
 
@@ -42,14 +50,15 @@ export async function GET() {
       stats: {
         totalGames,
         activeGames,
-        totalCategories,
-        todayResults: todayPublishedCount + todayDraftCount,
+        totalPublished,
+        totalDrafts,
+        totalArchived,
+        totalResults,
         todayPublished: todayPublishedCount,
         todayDrafts: todayDraftCount,
-        totalResults: totalResultsCount,
-        unreadMessages: unreadMessagesCount,
         todayDate: todayStr,
       },
+      recentResults,
       recentAudits,
     });
   } catch (error: any) {

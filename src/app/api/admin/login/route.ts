@@ -2,16 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyPassword, createAdminToken, COOKIE_NAME } from '@/lib/auth';
 import { recordAuditLog } from '@/lib/audit';
+import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      '127.0.0.1';
+
+    // 1. Check Rate Limit (max 5 attempts per 15 min per IP)
+    const rateLimit = checkRateLimit(`login:${ip}`, { limit: 5, windowMs: 15 * 60 * 1000 });
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        {
+          error: `Too many failed login attempts. Please try again in ${rateLimit.retryAfterSeconds} seconds.`,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimit.retryAfterSeconds),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      );
+    }
+
     const body = await req.json();
     const identifier = body.identifier || body.username || body.email;
     const password = body.password;
 
     if (!identifier || !password) {
       return NextResponse.json(
-        { error: 'Email/username and password are required' },
+        { error: 'Email/username and password are required.' },
         { status: 400 }
       );
     }
@@ -41,6 +67,9 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Reset rate limiter upon successful login
+    resetRateLimit(`login:${ip}`);
 
     const token = await createAdminToken({
       id: admin.id,
@@ -75,7 +104,7 @@ export async function POST(req: NextRequest) {
       adminUsername: admin.username,
       action: 'UPDATE_SETTING',
       reasonNote: 'Admin logged into secure control dashboard',
-      ipAddress: req.headers.get('x-forwarded-for') || '127.0.0.1',
+      ipAddress: ip,
       userAgent: req.headers.get('user-agent') || 'Browser',
     });
 

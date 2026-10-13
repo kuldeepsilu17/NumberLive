@@ -8,8 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx prisma/seed.ts",
+    "test:security": "tsx scripts/verify-security.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

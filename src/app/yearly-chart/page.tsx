@@ -19,30 +19,37 @@ interface PageProps {
 }
 
 export default async function YearlyChartPage({ searchParams }: PageProps) {
-  const initialGameSlug = searchParams.game || 'delhi';
-  const initialYear = searchParams.year ? parseInt(searchParams.year) : 2026;
+  const initialGameSlug = searchParams?.game || 'delhi';
+  const initialYear = searchParams?.year ? parseInt(searchParams.year) : 2026;
 
-  const games = await prisma.game.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-  });
+  let games: any[] = [];
+  let summary: any[] = [];
 
-  const todayStr = '2026-09-17';
-  const todayResults = await prisma.result.findMany({
-    where: { resultDate: todayStr },
-  });
-  const resultMap: Record<string, any> = {};
-  todayResults.forEach((r) => {
-    resultMap[r.gameId] = r;
-  });
+  try {
+    games = await prisma.game.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
 
-  const summary = games.map((g) => ({
-    game: g,
-    todayResult: resultMap[g.id]?.status === 'PUBLISHED' ? resultMap[g.id].resultValue : null,
-    yesterdayResult: null,
-    status: resultMap[g.id] ? (resultMap[g.id].status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
-    resultTime: g.resultTime,
-  }));
+    const todayStr = '2026-09-17';
+    const todayResults = await prisma.result.findMany({
+      where: { resultDate: todayStr },
+    });
+    const resultMap: Record<string, any> = {};
+    todayResults.forEach((r) => {
+      resultMap[r.gameId] = r;
+    });
+
+    summary = games.map((g) => ({
+      game: g,
+      todayResult: resultMap[g.id]?.status === 'PUBLISHED' ? resultMap[g.id].resultValue : null,
+      yesterdayResult: null,
+      status: resultMap[g.id] ? (resultMap[g.id].status as 'PUBLISHED' | 'DRAFT' | 'PENDING') : ('PENDING' as const),
+      resultTime: g.resultTime,
+    }));
+  } catch (err) {
+    console.warn('Prisma query warning on /yearly-chart:', err);
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">

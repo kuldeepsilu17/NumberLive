@@ -2,6 +2,12 @@ export interface Game {
   id: string;
   name: string;
   slug: string;
+  categoryId?: string | null;
+  category?: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
   resultTime: string;
   description: string;
   isActive: boolean;

@@ -6,15 +6,33 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = await getSessionAdmin();
+    if (!admin) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Admin session required to view audit logs.' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '25');
     const gameId = searchParams.get('gameId');
     const action = searchParams.get('action');
+    const search = searchParams.get('search')?.trim();
 
     const where: any = {};
     if (gameId) where.gameId = gameId;
     if (action) where.action = action;
+    if (search) {
+      where.OR = [
+        { adminUsername: { contains: search } },
+        { gameName: { contains: search } },
+        { reasonNote: { contains: search } },
+        { action: { contains: search } },
+        { targetDate: { contains: search } },
+      ];
+    }
 
     const total = await prisma.auditLog.count({ where });
     const logs = await prisma.auditLog.findMany({

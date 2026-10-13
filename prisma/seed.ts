@@ -18,14 +18,26 @@ async function main() {
   await prisma.category.deleteMany({});
   await prisma.adminUser.deleteMany({});
 
-  // 1. Create Default Admin User
-  const passwordHash = await bcrypt.hash('Admin@123456', 10);
+  // 1. Create Default Owner & Admin User
+  const ownerPasswordHash = await bcrypt.hash('Owner@NumberLive2026!', 10);
+  const owner = await prisma.adminUser.create({
+    data: {
+      email: 'owner@numberlive.in',
+      username: 'owner',
+      name: 'System Owner',
+      passwordHash: ownerPasswordHash,
+      role: 'OWNER',
+    },
+  });
+  console.log('✅ Created Owner user:', owner.email);
+
+  const adminPasswordHash = await bcrypt.hash('Admin@123456', 10);
   const admin = await prisma.adminUser.create({
     data: {
       email: 'admin@numberlive.in',
       username: 'admin',
       name: 'Chief Editorial Admin',
-      passwordHash,
+      passwordHash: adminPasswordHash,
       role: 'SUPER_ADMIN',
     },
   });

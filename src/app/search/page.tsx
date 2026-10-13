@@ -4,21 +4,17 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, Clock, ArrowRight } from 'lucide-react';
-import { formatReadableDate } from '@/lib/utils';
 
 function SearchPageContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<{ games: any[]; results: any[] }>({
-    games: [],
-    results: [],
-  });
+  const [games, setGames] = useState<any[]>([]);
 
   const performSearch = async (searchTerm: string) => {
     if (!searchTerm.trim()) {
-      setData({ games: [], results: [] });
+      setGames([]);
       return;
     }
     setLoading(true);
@@ -26,7 +22,7 @@ function SearchPageContent() {
       const res = await fetch(`/api/search?q=${encodeURIComponent(searchTerm)}`);
       const json = await res.json();
       if (json.success) {
-        setData({ games: json.games || [], results: json.results || [] });
+        setGames(json.games || []);
       }
     } catch (e) {
       console.error('Search error:', e);
@@ -47,121 +43,86 @@ function SearchPageContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Banner */}
-      <div className="bg-white dark:bg-[#111113] border border-[#EAE3D5] dark:border-[#2E2E33] p-4 sm:p-5 rounded-[9px] shadow-subtle flex items-center justify-between">
+    <div className="space-y-4 max-w-2xl mx-auto py-2">
+      {/* Search Header */}
+      <div className="bg-white dark:bg-[#111113] border border-[#EAE3D5] dark:border-[#27272A] p-4 sm:p-5 rounded-[8px] shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[6px] bg-[#FAF8F5] dark:bg-[#18181B] border border-[#EAE3D5] dark:border-[#2E2E33] flex items-center justify-center text-[#C5A059] shrink-0">
+          <div className="w-10 h-10 rounded-[6px] bg-[#FAF8F5] dark:bg-[#18181B] border border-[#EAE3D5] dark:border-[#27272A] flex items-center justify-center text-[#C5A059] shrink-0">
             <Search className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-black uppercase text-[#111113] dark:text-[#FAF8F5] tracking-tight">
-              SEARCH NUMBER RECORDS &amp; GAMES
+              SEARCH GAMES
             </h1>
             <p className="text-xs text-[#71717A] dark:text-[#A1A1AA] mt-0.5">
-              Instant search across game titles, number records (00–99), and dates.
+              Search games by name to view official timings and charts.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Search Input Bar (48px height) */}
-      <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto">
+      {/* Search Input */}
+      <form onSubmit={handleSearchSubmit} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A]" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A]" />
           <input
             type="text"
-            placeholder="Search game, number (00-99), or date (YYYY-MM-DD)..."
+            placeholder="Search game name (e.g. Delhi, Desawar, Gali)..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="form-input pl-11 text-xs sm:text-sm font-bold"
+            className="w-full h-10 pl-10 pr-3 text-xs font-semibold bg-white dark:bg-[#111113] border border-[#EAE3D5] dark:border-[#27272A] rounded-[6px] focus:outline-none focus:border-[#C5A059] text-[#111113] dark:text-white"
           />
         </div>
         <button
           type="submit"
-          className="btn-primary w-full sm:w-auto font-bold text-xs sm:text-sm px-6"
+          className="h-10 px-5 text-xs font-bold uppercase tracking-wider bg-[#111113] dark:bg-[#FAF8F5] text-white dark:text-[#111113] hover:bg-[#27272A] dark:hover:bg-[#E4E4E7] rounded-[6px] transition-colors"
         >
           Search
         </button>
       </form>
 
-      {/* Results */}
-      <div className="space-y-6">
+      {/* Search Results */}
+      <div className="space-y-3">
         {loading && (
-          <div className="py-10 text-center text-[#71717A] text-xs sm:text-sm">
-            Searching official records...
+          <div className="py-8 text-center text-xs text-[#71717A] dark:text-[#A1A1AA]">
+            Searching games...
           </div>
         )}
 
-        {!loading && query && data.games.length === 0 && data.results.length === 0 && (
-          <div className="py-10 bg-white dark:bg-[#111113] rounded-[9px] border border-[#EAE3D5] dark:border-[#2E2E33] text-center text-[#71717A] text-xs sm:text-sm">
-            <p className="font-bold text-[#111113] dark:text-[#FAF8F5] text-base">
-              No results found for &quot;{query}&quot;
-            </p>
-            <p className="text-[#71717A] mt-1 text-xs">
-              Try searching for a game name like &quot;Delhi&quot; or numbers 00 to 99.
-            </p>
+        {!loading && query && games.length === 0 && (
+          <div className="py-8 bg-white dark:bg-[#111113] rounded-[8px] border border-[#EAE3D5] dark:border-[#27272A] text-center text-xs text-[#71717A] dark:text-[#A1A1AA]">
+            No games found for &quot;{query}&quot;
           </div>
         )}
 
-        {/* Matched Games */}
-        {data.games.length > 0 && (
-          <div className="bg-white dark:bg-[#111113] rounded-[9px] border border-[#EAE3D5] dark:border-[#2E2E33] overflow-hidden shadow-subtle space-y-0">
-            <div className="section-header-clean bg-white dark:bg-[#111113] border-b border-[#EAE3D5] dark:border-[#2E2E33] p-3.5 sm:p-4 text-xs sm:text-sm font-black">
-              <span className="text-[#111113] dark:text-[#FAF8F5] uppercase">MATCHED GAMES ({data.games.length})</span>
+        {games.length > 0 && (
+          <div className="bg-white dark:bg-[#111113] rounded-[8px] border border-[#EAE3D5] dark:border-[#27272A] shadow-xs overflow-hidden">
+            <div className="bg-[#FAF8F5] dark:bg-[#18181B] border-b border-[#EAE3D5] dark:border-[#27272A] px-3.5 py-2 text-xs font-black uppercase text-[#111113] dark:text-[#FAF8F5]">
+              MATCHED GAMES ({games.length})
             </div>
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {data.games.map((g) => (
-                <Link
+            <div className="divide-y divide-[#EAE3D5] dark:divide-[#27272A]">
+              {games.map((g) => (
+                <div
                   key={g.id}
-                  href={`/games/${g.slug}`}
-                  className="min-h-[56px] p-3.5 bg-[#FAF8F5] dark:bg-[#18181B] hover:border-[#C5A059] border border-[#EAE3D5] dark:border-[#2E2E33] rounded-[8px] flex items-center justify-between group transition-colors active:scale-[0.99]"
+                  className="p-3 sm:px-4 flex items-center justify-between hover:bg-[#FAF8F5] dark:hover:bg-[#18181B] transition-colors"
                 >
                   <div>
-                    <h3 className="font-black text-[#111113] dark:text-white group-hover:text-[#C5A059] text-xs sm:text-sm uppercase">
+                    <h2 className="text-xs sm:text-sm font-black uppercase text-[#111113] dark:text-[#FAF8F5]">
                       {g.name}
-                    </h3>
-                    <p className="text-[11px] text-[#71717A] dark:text-[#A1A1AA] flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-3 h-3 text-[#8C8275]" /> Scheduled: {g.resultTime}
+                    </h2>
+                    <p className="text-[11px] text-[#71717A] dark:text-[#A1A1AA] flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3 text-[#C5A059]" />
+                      <span>Result Time: {g.resultTime}</span>
                     </p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-[#71717A] group-hover:text-[#C5A059] transition-colors" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Matched Results */}
-        {data.results.length > 0 && (
-          <div className="bg-white dark:bg-[#111113] rounded-[9px] border border-[#EAE3D5] dark:border-[#2E2E33] overflow-hidden shadow-subtle space-y-0">
-            <div className="section-header-clean bg-white dark:bg-[#111113] border-b border-[#EAE3D5] dark:border-[#2E2E33] p-3.5 sm:p-4 text-xs sm:text-sm font-black">
-              <span className="text-[#111113] dark:text-[#FAF8F5] uppercase">PUBLISHED NUMBER RECORDS ({data.results.length})</span>
-            </div>
-            <div className="divide-y divide-[#EAE3D5] dark:divide-[#2E2E33]">
-              {data.results.map((r) => (
-                <Link
-                  key={r.id}
-                  href={`/games/${r.game?.slug || ''}`}
-                  className="p-3.5 sm:p-4 flex items-center justify-between gap-3 text-xs sm:text-sm hover:bg-[#FAF8F5] dark:hover:bg-[#18181B] transition-colors block"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-base text-[#111113] dark:text-[#FAF8F5] bg-[#FAF8F5] dark:bg-[#18181B] px-3 py-1 rounded-[6px] border border-[#EAE3D5] dark:border-[#2E2E33] shadow-xs">
-                      {r.resultValue}
-                    </span>
-                    <div>
-                      <span className="font-bold text-[#111113] dark:text-white text-xs sm:text-sm uppercase block">
-                        {r.game?.name}
-                      </span>
-                      <p className="text-[11px] text-[#71717A]">
-                        {r.resultTime}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-[#71717A] dark:text-[#A1A1AA] font-bold text-xs">
-                    {formatReadableDate(r.resultDate)}
-                  </div>
-                </Link>
+                  <Link
+                    href={`/charts/${g.slug}`}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-[#C5A059] hover:underline"
+                  >
+                    <span>Record Chart</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -173,7 +134,13 @@ function SearchPageContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="py-12 text-center text-[#71717A] text-xs sm:text-sm">Loading search engine...</div>}>
+    <Suspense
+      fallback={
+        <div className="py-12 text-center text-xs text-[#71717A]">
+          Loading search...
+        </div>
+      }
+    >
       <SearchPageContent />
     </Suspense>
   );

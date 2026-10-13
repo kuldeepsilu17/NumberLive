@@ -43,3 +43,57 @@ export function formatResultNumber(num: string | number | null | undefined): str
   }
   return str;
 }
+
+export type GameLiveStatus = 'RESULT' | 'LIVE' | 'PENDING' | 'UPCOMING';
+
+export function calculateGameStatus(
+  resultTimeStr: string,
+  hasPublishedResult: boolean,
+  isToday: boolean = true
+): GameLiveStatus {
+  if (hasPublishedResult) {
+    return 'RESULT';
+  }
+
+  if (!isToday) {
+    return 'PENDING';
+  }
+
+  try {
+    const match = resultTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return 'PENDING';
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const meridiem = match[3].toUpperCase();
+
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+
+    const now = new Date();
+    const istTimeStr = now.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const [currH, currM] = istTimeStr.split(':').map(Number);
+    const currentMinutes = currH * 60 + currM;
+    const targetMinutes = hours * 60 + minutes;
+
+    const diff = currentMinutes - targetMinutes;
+
+    if (diff >= -10 && diff <= 25) {
+      return 'LIVE';
+    }
+
+    if (diff > 25) {
+      return 'PENDING';
+    }
+
+    return 'UPCOMING';
+  } catch {
+    return 'PENDING';
+  }
+}
+

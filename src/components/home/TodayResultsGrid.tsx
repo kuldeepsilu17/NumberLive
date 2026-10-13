@@ -38,9 +38,10 @@ export default function TodayResultsGrid({
   };
 
   const filteredItems = summary.filter((item) => {
-    const matchesSearch =
-      item.game.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
-      (item.todayResult && item.todayResult.includes(filterQuery));
+    const q = filterQuery.toLowerCase().trim();
+    const gameName = String(item.game?.name ?? '').toLowerCase();
+    const todayRes = String(item.todayResult ?? '').toLowerCase();
+    const matchesSearch = !q || gameName.includes(q) || todayRes.includes(q);
     const matchesStatus =
       statusFilter === 'ALL'
         ? true

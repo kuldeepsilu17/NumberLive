@@ -4,11 +4,16 @@ interface LogAuditParams {
   adminId?: string | null;
   adminUsername: string;
   action:
+    | 'OWNER_LOGIN'
+    | 'OWNER_LOGOUT'
+    | 'ADMIN_LOGIN'
+    | 'ADMIN_LOGOUT'
     | 'CREATE_RESULT'
     | 'UPDATE_RESULT'
     | 'PUBLISH_RESULT'
     | 'CORRECT_RESULT'
     | 'UNPUBLISH_RESULT'
+    | 'ARCHIVE_RESULT'
     | 'DELETE_RESULT'
     | 'CREATE_GAME'
     | 'UPDATE_GAME'
@@ -23,6 +28,10 @@ interface LogAuditParams {
     | 'UPDATE_SEO'
     | 'UPDATE_CONTENT'
     | 'UPDATE_SETTING'
+    | 'USER_CREATED'
+    | 'USER_UPDATED'
+    | 'USER_DELETED'
+    | 'NOTIFICATION_UPDATED'
     | string;
   gameId?: string | null;
   gameName?: string | null;
